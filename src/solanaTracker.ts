@@ -1,5 +1,6 @@
 import axios from "axios";
 import { SOLANA_ADDRESS, BIRDEYE_API_KEY } from "./config.js";
+import crypto from "crypto";
 
 export type SolanaEvent = {
   type: string;
@@ -265,6 +266,14 @@ let lastHoldersAbsNotified: number | undefined;
 let lastHoldersPctNotified: number | undefined;
 let lastTopHolders: string[] | undefined;
 
+const sentEventHashes = new Set<string>();
+
+function hashEvent(event: Partial<SolanaEvent>): string {
+  // Only hash the type, title, and message for deduplication
+  const str = `${event.type || ''}|${event.title || ''}|${event.message || ''}`;
+  return crypto.createHash('sha256').update(str).digest('hex');
+}
+
 function findThresholdCrossed(value: number, thresholds: number[], lastValue?: number): {threshold: number, direction: 'up'|'down'}|undefined {
   for (const t of thresholds) {
     if (lastValue !== undefined) {
@@ -303,15 +312,20 @@ export async function monitorSolana(
       } else if (currentTopHolders.join(',') !== lastTopHolders.join(',')) {
         const title = '👛 Top Holders Changed';
         const message = `👛 Top holders list has changed!\nNew top holders:\n${currentTopHolders.map((a, i) => `#${i+1}: ${a}`).join('\n')}`;
-        console.log(`[Notify] ${title}: ${message}`);
-        await onEvent({
+        const event = {
           type: 'top_holders_change',
           message,
           timestamp: now,
           title,
           priority: 'high',
           tags: 'busts_in_silhouette',
-        });
+        };
+        const hash = hashEvent(event);
+        if (!sentEventHashes.has(hash)) {
+          console.log(`[Notify] ${title}: ${message}`);
+          await onEvent(event);
+          sentEventHashes.add(hash);
+        }
         lastTopHolders = currentTopHolders;
       }
 
@@ -323,15 +337,20 @@ export async function monitorSolana(
         const title = `${emoji} Market Cap ${directionWord} $${mcapCross.threshold.toLocaleString()}`;
         const priority = mcapCross.direction === 'up' ? 'high' : 'default';
         const message = `${emoji} Market cap is now ${directionWord} $${mcapCross.threshold.toLocaleString()} (${symbol})\nCurrent: $${mcap.toLocaleString()} | Price: $${price}`;
-        console.log(`[Notify] ${title}: ${message}`);
-        await onEvent({
+        const event = {
           type: 'marketcap',
           message,
           timestamp: now,
           title,
           priority,
           tags: 'chart_with_upwards_trend',
-        });
+        };
+        const hash = hashEvent(event);
+        if (!sentEventHashes.has(hash)) {
+          console.log(`[Notify] ${title}: ${message}`);
+          await onEvent(event);
+          sentEventHashes.add(hash);
+        }
         lastMcapThreshold = mcapCross.threshold;
         lastMcapDirection = mcapCross.direction;
       }
@@ -348,15 +367,20 @@ export async function monitorSolana(
           const title = `${emoji} Price 24h change ${direction} ${pct}%`;
           const priority = pct >= 50 ? 'urgent' : 'high';
           const message = `${emoji} Price 24h change is now ${priceChange24h.toFixed(2)}% (${direction})\nCurrent: $${price} (${symbol})`;
-          console.log(`[Notify] ${title}: ${message}`);
-          await onEvent({
+          const event = {
             type: 'price_change',
             message,
             timestamp: now,
             title,
             priority,
             tags: 'money_with_wings',
-          });
+          };
+          const hash = hashEvent(event);
+          if (!sentEventHashes.has(hash)) {
+            console.log(`[Notify] ${title}: ${message}`);
+            await onEvent(event);
+            sentEventHashes.add(hash);
+          }
           lastPriceChangeNotified = pct;
           break;
         }
@@ -369,15 +393,20 @@ export async function monitorSolana(
           const title = `${emoji} Volume 24h above $${v.toLocaleString()}`;
           const priority = v >= 100_000 ? 'high' : 'default';
           const message = `${emoji} 24h volume is now $${volume24h.toLocaleString()} (${symbol})`;
-          console.log(`[Notify] ${title}: ${message}`);
-          await onEvent({
+          const event = {
             type: 'volume',
             message,
             timestamp: now,
             title,
             priority,
             tags: 'moneybag',
-          });
+          };
+          const hash = hashEvent(event);
+          if (!sentEventHashes.has(hash)) {
+            console.log(`[Notify] ${title}: ${message}`);
+            await onEvent(event);
+            sentEventHashes.add(hash);
+          }
           lastVolume24hNotified = v;
           break;
         }
@@ -390,15 +419,20 @@ export async function monitorSolana(
           const title = `${emoji} Trades 24h above ${t}`;
           const priority = t >= 100 ? 'high' : 'default';
           const message = `${emoji} 24h trades is now ${trades24h} (${symbol})`;
-          console.log(`[Notify] ${title}: ${message}`);
-          await onEvent({
+          const event = {
             type: 'trades',
             message,
             timestamp: now,
             title,
             priority,
             tags: 'repeat',
-          });
+          };
+          const hash = hashEvent(event);
+          if (!sentEventHashes.has(hash)) {
+            console.log(`[Notify] ${title}: ${message}`);
+            await onEvent(event);
+            sentEventHashes.add(hash);
+          }
           lastTrades24hNotified = t;
           break;
         }
@@ -413,15 +447,20 @@ export async function monitorSolana(
             const title = `${emoji} Holders increased by ${abs}`;
             const priority = 'high';
             const message = `${emoji} Holders count is now ${holdersCount} (${symbol})`;
-            console.log(`[Notify] ${title}: ${message}`);
-            await onEvent({
+            const event = {
               type: 'holders_count',
               message,
               timestamp: now,
               title,
               priority,
               tags: 'chart_with_upwards_trend',
-            });
+            };
+            const hash = hashEvent(event);
+            if (!sentEventHashes.has(hash)) {
+              console.log(`[Notify] ${title}: ${message}`);
+              await onEvent(event);
+              sentEventHashes.add(hash);
+            }
             lastHoldersAbsNotified = abs;
           }
         }
@@ -432,15 +471,20 @@ export async function monitorSolana(
             const title = `${emoji} Holders percentage increased by ${pct}%`;
             const priority = 'high';
             const message = `${emoji} Holders percentage is now ${(holdersCount / lastHoldersCount * 100).toFixed(2)}% (${symbol})`;
-            console.log(`[Notify] ${title}: ${message}`);
-            await onEvent({
+            const event = {
               type: 'holders_percentage',
               message,
               timestamp: now,
               title,
               priority,
               tags: 'chart_with_upwards_trend',
-            });
+            };
+            const hash = hashEvent(event);
+            if (!sentEventHashes.has(hash)) {
+              console.log(`[Notify] ${title}: ${message}`);
+              await onEvent(event);
+              sentEventHashes.add(hash);
+            }
             lastHoldersPctNotified = pct;
           }
         }
